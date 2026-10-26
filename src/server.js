@@ -1,0 +1,11 @@
+import {Store} from './store.js';
+import {Finance,due} from './service.js';
+import {createApp} from './app.js';
+import path from 'node:path';
+import os from 'node:os';
+const store=new Store(process.env.FINANCE_DATA_DIR||path.join(os.homedir(),'Library/Application Support/OpenFinanceDesktop'));
+const finance=new Finance(store),port=Number(process.env.PORT||4318);
+const server=createApp(finance,{port}).listen(port,'127.0.0.1',()=>console.log(`Open Finance disponível em http://127.0.0.1:${port}`));
+const tick=()=>{if(!finance.busy&&due(store.data)) void finance.sync('daily').catch(()=>{});};
+const timer=setInterval(tick,60000);tick();
+for(const signal of ['SIGTERM','SIGINT']) process.on(signal,()=>{clearInterval(timer);server.close(()=>process.exit(0));});
