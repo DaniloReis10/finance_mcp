@@ -1,25 +1,32 @@
 # Open Finance Desktop
 
-Aplicativo pessoal para macOS com painel local, integração Pluggy Open Finance, sincronização diária/manual e servidor MCP. Preparado para conectar Bradesco, Santander, Nubank, Inter e PicPay conforme disponibilidade do provedor. Não inicia pagamentos.
+Aplicativo pessoal para macOS com painel local, integração pessoal Meu Pluggy (e suporte legado a conexões diretas), sincronização diária/manual e servidor MCP. Preparado para conectar Bradesco, Santander, Nubank, Inter e PicPay conforme disponibilidade do provedor. Não inicia pagamentos.
 
 ## Estado da entrega
 
 - Interface e servidor local implementados; atalho `Open Finance.app` criado no Desktop.
-- Dez testes automatizados passaram, incluindo chamada MCP com o cliente oficial.
-- Sem dados fictícios. A conexão real depende de conta Pluggy com Open Finance habilitado e do consentimento em cada banco; ainda não foi testada com contas reais.
+- Dezesseis testes automatizados passaram, incluindo chamada MCP com o cliente oficial.
+- Sem dados fictícios. A conexão real usa o Meu Pluggy, o conector MeuPluggy autorizado no Dashboard e os Item IDs de cada banco. O acesso pessoal é gratuito segundo o guia oficial do provedor. A importação real ainda depende da autorização do usuário e não foi testada com contas reais.
 - Repositório do projeto: https://github.com/DaniloReis10/finance_mcp.
 - A conexão externa com ChatGPT depende de configurar um Secure MCP Tunnel na conta OpenAI. O servidor MCP local funciona, mas não está conectado ao ChatGPT.
 - Nesta instalação, o serviço de início automático do macOS não foi instalado por falta de permissão para `Library/LaunchAgents`. Abra o atalho após cada reinicialização. Fechar o navegador não encerra o processo em segundo plano; encerramento de sessão, reinício ou falha do processo exige abrir o atalho novamente.
 
 ## Uso
 
-1. Abra **Open Finance** no Desktop. O atalho inicia o servidor e autentica sua sessão no navegador padrão.
-2. Crie sua conta em https://dashboard.pluggy.ai e confirme com o provedor a habilitação, cobertura e preços de Open Finance. O aplicativo não contrata nenhum plano.
-3. Em **Configurações**, insira `Client ID` e `Client Secret` da sua aplicação Pluggy. Não insira senha bancária neste formulário.
-4. Clique **Conectar banco**, escolha a instituição e conclua o consentimento no fluxo do provedor/banco. A lista é obtida da API e restrita a conectores Open Finance reais.
-5. Use **Sincronizar agora**, ou mantenha a atualização automática ativada.
+1. Conecte seus bancos em https://meu.pluggy.ai. O guia oficial informa uso pessoal gratuito, até cinco conexões e sem assinatura comercial: https://docs.pluggy.ai/en/docs/guides/meu-pluggy-personal-use.
+2. Acesse o Dashboard Pluggy com a mesma conta. Em **Applications → sua aplicação → Demo → Connect Account**, escolha **MeuPluggy** (não o banco diretamente e não Sandbox). Se não aparecer, habilite esse conector em **Customization → Connectors → Personal → Direct Connectors**.
+3. Autorize o acesso de cada banco. Em **Connected Items**, copie o **Item ID** criado para a aplicação. Não utilize um ID de outra aplicação nem suponha que o ID original do portal pessoal é o mesmo.
+4. Abra **Open Finance** no Desktop e salve em **Configurações** o `Client ID` e o `Client Secret` dessa mesma aplicação do Dashboard. Não informe senha bancária neste formulário.
+5. Clique **Importar do Meu Pluggy**, cole o Item ID e dê um nome ao banco. Repita para cada conexão. O aplicativo valida o acesso com a API e inicia a leitura.
+6. Deixe **Ler dados disponíveis a cada 24 horas** ativado. **Sincronizar agora** e a ferramenta MCP fazem uma nova leitura do cache disponível no provedor; não forçam uma atualização bancária.
 
-O serviço verifica a agenda a cada minuto, após o primeiro banco ser registrado. Uma sincronização completa bem-sucedida adia a próxima por 24 horas. Em falha total ou parcial, uma nova tentativa ocorre após uma hora. Ao acordar da suspensão, o Mac processa a atualização vencida. A conexão à internet e a sessão do usuário precisam estar disponíveis. MFA ou consentimento expirado podem exigir intervenção no banco.
+A conexão original é atualizada diariamente pelo Meu Pluggy. A aplicação nunca envia `PATCH /items/{id}` para conexões importadas nesse modo. O horário “Lido no Mac” é separado de “Banco atualizado”; este último é o `lastUpdatedAt` que o provedor informou, quando disponível.
+
+A autorização do conector MeuPluggy tem validade própria e pode precisar de renovação. Se `consentExpiresAt` estiver vencido ou o item indicar falha de autorização, o aplicativo preserva o cache e pede renovação. Reautorize no Dashboard, confira o novo Item ID e importe-o. Após validar a nova conexão, remova a antiga do aplicativo para evitar apresentar dados duplicados. **Remover deste aplicativo** apaga o cache local e não exclui a autorização no Meu Pluggy.
+
+A opção **Conexão direta com plano comercial** fica separada. Essas conexões legadas continuam usando atualização bancária via API; elas não são convertidas para o modo pessoal automaticamente. Use a importação dos Item IDs do MeuPluggy para o caminho pessoal.
+
+O serviço verifica a agenda a cada minuto, após o primeiro banco ser registrado. Uma leitura completa bem-sucedida adia a próxima leitura local por 24 horas. Essa agenda é independente do horário da atualização bancária no Meu Pluggy. Em falha total ou parcial, uma nova tentativa ocorre após uma hora. Ao acordar da suspensão, o Mac processa a atualização vencida. A conexão à internet e a sessão do usuário precisam estar disponíveis. MFA ou consentimento expirado podem exigir intervenção no banco.
 
 Os produtos desta versão são contas, cartões e transações disponibilizados pelo provedor. Investimentos, empréstimos, extratos em PDF e conciliação contábil não estão implementados. O painel soma apenas contas bancárias em BRL; cartões e outras moedas permanecem separados nos dados de contas. Datas e sinais de transações seguem o provedor.
 
@@ -59,9 +66,9 @@ Servidor HTTP: `http://127.0.0.1:4318/mcp`, transporte Streamable HTTP sem estad
 | `sync_status` | Consultar conexões, erros e data de atualização |
 | `list_accounts` | Consultar contas, saldos e moedas |
 | `list_transactions` | Consultar transações por conta/período, com paginação |
-| `sync_now` | Iniciar uma atualização e acompanhar por `sync_status` |
+| `sync_now` | Ler dados disponíveis no Meu Pluggy e acompanhar por `sync_status` |
 
-`list_transactions` aceita `accountId`, `from` e `to` em `AAAA-MM-DD`, `limit` de 1 a 500 e `offset`. A ferramenta de sincronização é declarada como escrita; ela consulta o provedor e modifica o cache, sem realizar transações financeiras.
+`list_transactions` aceita `accountId`, `from` e `to` em `AAAA-MM-DD`, `limit` de 1 a 500 e `offset`. A ferramenta de sincronização é declarada como escrita; ela consulta o provedor e modifica o cache, sem realizar transações financeiras. No modo Meu Pluggy, não força uma atualização nos bancos.
 
 ### Túnel privado
 
@@ -86,12 +93,12 @@ Após revogar o token local, reinicie a ponte/túnel para que leia o novo token.
 - Interface protegida por sessão HttpOnly/SameSite e validações de Host/Origin; MCP exige token distinto. Servidor restrito a loopback.
 - Apenas dados selecionados de contas/transações são persistidos. Senhas bancárias não são recebidas pelo backend; o consentimento ocorre no widget oficial do provedor.
 - Atualizações são serializadas. Todas as páginas de um banco precisam ter sido obtidas antes da substituição dos dados locais. Falhas preservam o último resultado e aparecem no histórico.
-- Conexões são registradas pelo callback do widget e validadas por `clientUserId`. A sincronização usa somente os IDs salvos e não depende do endpoint comercial de listagem da Pluggy. Se a janela fechar antes do callback, a conexão não será registrada automaticamente; conclua o fluxo pelo aplicativo. Conexões antigas de outros aplicativos não são importadas.
-- **Desconectar e apagar dados** remove o item no provedor e os dados locais desse banco. Confira os consentimentos também no app bancário.
+- Conexões Meu Pluggy são importadas explicitamente pelo dono da instalação a partir de um Item ID. A API confirma acesso com as credenciais salvas; o `clientUserId` do Dashboard pode diferir do ID da instalação desktop. Não há listagem global de itens. Este fluxo é para uma única pessoa, não um servidor multiusuário. Conexões diretas pelo widget ainda exigem o `clientUserId` desta instalação.
+- **Remover deste aplicativo**, no modo Meu Pluggy, remove apenas dados locais. Em conexões diretas legadas, **Desconectar e apagar dados** também remove o item no provedor.
 
 ## Verificação
 
-Testes com provedor simulado cobrem criptografia, integridade, permissões, agenda e retomada, paginação, falha de consentimento, deduplicação, falha parcial, preservação de dados, concorrência, sessão, Host/Origin e transporte MCP com o cliente oficial. A ponte stdio também foi verificada contra o servidor local. O fluxo real de consentimento, quotas e atualização dos cinco bancos precisa ser validado após configurar a Pluggy.
+Testes com provedor simulado cobrem criptografia, integridade, permissões, agenda e retomada, paginação, falha de consentimento, deduplicação, falha parcial, preservação de dados, concorrência, sessão, Host/Origin e transporte MCP com o cliente oficial. A ponte stdio também foi verificada contra o servidor local. Os testes adicionais verificam a importação por ID, falta de permissão, rejeição de Sandbox, leitura sem PATCH, preservação do cache com autorização vencida e remoção local sem DELETE no provedor. O fluxo real dos cinco bancos precisa ser validado após importar os IDs autorizados.
 
 ## GitHub
 
@@ -108,6 +115,7 @@ O diretório de dados deve ficar fora do checkout. Os caminhos acima são exempl
 
 ## Referências
 
+- Uso pessoal e gratuidade: https://meu.pluggy.ai/api-guide
 - Pluggy Connect: https://docs.pluggy.ai/en/docs/connect-widget/introduction
 - Open Finance e habilitação: https://docs.pluggy.ai/en/docs/open-finance/overview
 - Atualização de conexão: https://docs.pluggy.ai/en/reference/items/items-update

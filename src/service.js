@@ -13,21 +13,32 @@ export class Finance {
     return {configured:!!d.credentials,dailyEnabled:d.dailyEnabled,busy:this.busy,
       lastSuccess:d.lastSuccess,lastAttempt:d.lastAttempt,items:d.items,
       nextSync:d.dailyEnabled && d.credentials && d.items.length ? new Date(Math.max(Date.now(),d.lastSuccess?Date.parse(d.lastSuccess)+DAY:0,d.lastAttempt?Date.parse(d.lastAttempt)+3600000:0)).toISOString():null,
-      history:d.history,accounts:d.accounts,transactionCount:d.transactions.length};
+      history:d.history,accounts:d.accounts,transactionCount:d.transactions.length,
+      syncMeaning:'Última sincronização é a leitura local. No Meu Pluggy, a atualização bancária ocorre no provedor a cada 24 horas; o botão apenas lê os dados disponíveis.'};
   }
   transactions({accountId,from,to,limit=100,offset=0}={}) {
     const rows=this.store.data.transactions.filter(t=>(!accountId||t.accountId===accountId)&&(!from||t.date.slice(0,10)>=from)&&(!to||t.date.slice(0,10)<=to)).sort((a,b)=>b.date.localeCompare(a.date));
-    return {total:rows.length,offset,limit,results:rows.slice(offset,offset+limit),lastSuccess:this.store.data.lastSuccess};
+    return {total:rows.length,offset,limit,results:rows.slice(offset,offset+limit),lastSuccess:this.store.data.lastSuccess,dataSources:this.store.data.items.map(({id,mode,providerUpdatedAt,lastSuccess})=>({id,mode,providerUpdatedAt,lastSuccess}))};
   }
   async register(id) {
     const item=await this.client().request('/items/'+encodeURIComponent(id));
     if(item.clientUserId!==this.store.data.userId || !item.connector?.isOpenFinance) throw new Error('Esta conexão não pertence a este aplicativo ou não é Open Finance.');
     this.upsertItem(item);this.store.save();
   }
+  async importMeuPluggy(id,label) {
+    // Explicit owner import from the Dashboard. Its clientUserId may differ from
+    // this desktop installation. GET verifies access using this app's API key.
+    const item=await this.client().request('/items/'+encodeURIComponent(id));
+    if(item.id!==id || !item.connector || item.connector.isSandbox) throw new Error('Use o Item ID real autorizado pelo conector MeuPluggy na mesma aplicação das credenciais salvas.');
+    this.upsertItem(item);
+    Object.assign(this.store.data.items.find(i=>i.id===id),{mode:'meu-pluggy',label:label||null,name:label||item.connector.name||'Meu Pluggy'});
+    this.store.save();
+  }
   upsertItem(item) {
     const d=this.store.data;
     const previous=d.items.find(i=>i.id===item.id);
-    const safe={...previous,id:item.id,name:item.connector?.name||'Banco',status:item.status};
+    const safe={...previous,id:item.id,name:previous?.label||item.connector?.name||'Banco',status:item.status,
+      providerUpdatedAt:item.lastUpdatedAt||null,consentExpiresAt:item.consentExpiresAt||null};
     d.items=d.items.filter(i=>i.id!==item.id).concat(safe);
   }
   async sync(source='manual') {
@@ -39,10 +50,10 @@ export class Finance {
     let successes=0,errors=[];
     try {
       const client=this.client();
-      if(!d.items.length) throw new Error('Nenhum banco conectado. Use “Conectar banco” para autorizar o acesso.');
+      if(!d.items.length) throw new Error('Nenhum banco conectado. Use “Importar do Meu Pluggy” para cadastrar o Item ID autorizado.');
       for(const item of [...d.items]) {
         try {
-          const updated=await client.refresh(item.id);
+          const updated=item.mode==='meu-pluggy'?await client.readAvailable(item.id):await client.refresh(item.id);
           const accounts=await client.pages('/accounts?itemId='+encodeURIComponent(item.id));
           const normalized=[],transactions=[];
           for(const a of accounts) {

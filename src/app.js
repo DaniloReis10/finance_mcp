@@ -18,7 +18,7 @@ export function createApp(finance,{port=4318}={}) {
     next();
   });
   app.use(express.json({limit:'16kb'}));
-  app.get('/health',(_req,res)=>res.json({app:'open-finance-desktop',ok:true}));
+  app.get('/health',(_req,res)=>res.json({app:'open-finance-desktop',version:'1.1.0',ok:true}));
   mountMcp(app,finance);
   app.post('/api/session',(req,res)=>{
     if(!equalSecret(req.body?.token,finance.store.data.uiToken)) return res.status(401).json({error:'Abra o aplicativo pelo atalho do desktop.'});
@@ -56,14 +56,20 @@ export function createApp(finance,{port=4318}={}) {
     res.json(await finance.client().request('/connect_token','POST',{...(itemId?{itemId}:{}),options:{clientUserId:finance.store.data.userId,avoidDuplicates:true}}));
   });
   app.post('/api/items',async(req,res)=>{
-    if(finance.busy) return res.status(409).json({error:'A conexão será recuperada na próxima sincronização.'});
+    if(finance.busy) return res.status(409).json({error:'Aguarde a sincronização e cadastre a conexão novamente.'});
     await finance.register(z.object({id:z.string().uuid()}).parse(req.body).id);res.json({ok:true});
+  });
+  app.post('/api/meu-pluggy/items',async(req,res)=>{
+    if(finance.busy) return res.status(409).json({error:'Aguarde a sincronização terminar.'});
+    const {id,label}=z.object({id:z.string().uuid(),label:z.string().trim().max(80).optional()}).parse(req.body);
+    await finance.importMeuPluggy(id,label);res.json({ok:true});
   });
   app.post('/api/disconnect',async(req,res)=>{
     if(finance.busy) return res.status(409).json({error:'Aguarde a sincronização terminar.'});
     const {id}=z.object({id:z.string().uuid()}).parse(req.body),d=finance.store.data;
     if(!d.items.some(i=>i.id===id)) return res.status(404).json({error:'Conexão desconhecida.'});
-    await finance.client().request('/items/'+encodeURIComponent(id),'DELETE');
+    // Removing an imported proxy from this app must not delete the source consent.
+    if(d.items.find(i=>i.id===id).mode!=='meu-pluggy') await finance.client().request('/items/'+encodeURIComponent(id),'DELETE');
     d.items=d.items.filter(i=>i.id!==id);d.accounts=d.accounts.filter(i=>i.itemId!==id);d.transactions=d.transactions.filter(i=>i.itemId!==id);finance.store.save();res.json({ok:true});
   });
   app.post('/api/sync',(_req,res)=>{

@@ -27,3 +27,41 @@ test('HTTP rejects unauthenticated access, forged host/origin and serves MCP SDK
 
  test('sync without banks does not call restricted listing or the provider',async t=>{const s=store(t);let calls=0;const f=new Finance(s,{pages:async()=>{calls++;throw new Error('must not list');}});const result=await f.sync();assert.equal(calls,0);assert.match(result.errors[0].message,/Nenhum banco conectado/);assert.equal(due({...s.data,credentials:{}}),false);});
  test('401 refreshes API key once and reports application authorization, not a bank error',async()=>{let auth=0,reads=0;const p=new Pluggy({clientId:'test',clientSecret:'test'},async url=>{if(url.endsWith('/auth')){auth++;return new Response(JSON.stringify({apiKey:'fake'}),{status:200});}reads++;return new Response('{}',{status:401});});await assert.rejects(p.request('/accounts?itemId=test'),/autorização da aplicação/);assert.equal(auth,2);assert.equal(reads,2);});
+
+test('Meu Pluggy import accepts an owner-selected Dashboard item and is idempotent',async t=>{
+  const s=store(t);const id='12345678-1234-4234-8234-123456789012';
+  const f=new Finance(s,{request:async route=>{assert.equal(route,'/items/'+id);return {id,clientUserId:'dashboard-user',connector:{id:200,name:'MeuPluggy',isOpenFinance:false},status:'UPDATED'};}});
+  await f.importMeuPluggy(id,'Nubank');await f.importMeuPluggy(id,'Nubank');
+  assert.equal(s.data.items.length,1);assert.equal(s.data.items[0].mode,'meu-pluggy');assert.equal(s.data.items[0].name,'Nubank');
+});
+test('Meu Pluggy import rejects sandbox and inaccessible items without persisting them',async t=>{
+  const s=store(t);const f=new Finance(s,{request:async()=>({id:'a',connector:{isSandbox:true}})});
+  await assert.rejects(f.importMeuPluggy('a','Teste'),/Item ID real/);assert.equal(s.data.items.length,0);
+  f.provider.request=async()=>{throw new Error('unauthorized');};await assert.rejects(f.importMeuPluggy('a'),/unauthorized/);assert.equal(s.data.items.length,0);
+});
+test('Meu Pluggy sync reads existing data without PATCH and distinguishes provider freshness',async t=>{
+  const s=store(t);s.data.items=[{id:'a',mode:'meu-pluggy',label:'Inter'}];let patched=false;
+  const f=new Finance(s,{refresh:async()=>{patched=true;throw new Error('PATCH forbidden');},readAvailable:async()=>({id:'a',connector:{name:'MeuPluggy'},status:'UPDATED',lastUpdatedAt:'2026-01-01T00:00:00Z'}),pages:async route=>route.startsWith('/accounts')?[{id:'account',name:'Conta',balance:1,type:'BANK'}]:[{id:'tx',date:'2026-01-01',amount:1}]});
+  assert.equal((await f.sync()).status,'success');assert.equal(patched,false);assert.equal(s.data.items[0].name,'Inter');assert.equal(s.data.items[0].providerUpdatedAt,'2026-01-01T00:00:00Z');assert.notEqual(s.data.items[0].providerUpdatedAt,s.data.items[0].lastSuccess);
+});
+test('expired Meu Pluggy consent preserves the cached snapshot even with UPDATED status',async t=>{
+  const s=store(t);s.data.items=[{id:'a',mode:'meu-pluggy'}];s.data.accounts=[{id:'old',itemId:'a',balance:50}];s.data.transactions=[{id:'old-t',itemId:'a'}];
+  const p=new Pluggy({});p.request=async()=>({id:'a',status:'UPDATED',consentExpiresAt:'2000-01-01T00:00:00Z'});p.pages=async()=>{throw new Error('must not read after expiry');};
+  const f=new Finance(s,p);const result=await f.sync();assert.equal(result.status,'error');assert.match(result.errors[0].message,/expirou/);assert.equal(s.data.accounts[0].balance,50);assert.equal(s.data.transactions[0].id,'old-t');
+});
+test('Meu Pluggy live reader uses GET only and rejects login errors',async()=>{
+  const p=new Pluggy({}),calls=[];p.request=async(...args)=>{calls.push(args);return {status:'UPDATED',consentExpiresAt:'2999-01-01T00:00:00Z'};};
+  await p.readAvailable('a');assert.deepEqual(calls,[['/items/a']]);p.request=async()=>({status:'LOGIN_ERROR'});await assert.rejects(p.readAvailable('a'),/Renove/);
+});
+test('HTTP Meu Pluggy import requires session, validates UUID and removal stays local',async t=>{
+  const s=store(t),calls=[],id='12345678-1234-4234-8234-123456789012';
+  const f=new Finance(s,{request:async(...args)=>{calls.push(args);return {id,connector:{id:200,name:'MeuPluggy'},status:'UPDATED'};}});
+  const server=createApp(f,{port:4388}).listen(4388,'127.0.0.1');await new Promise((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});t.after(()=>new Promise(r=>server.close(r)));
+  const base='http://127.0.0.1:4388/api/';const headers={'Content-Type':'application/json'};
+  assert.equal((await fetch(base+'meu-pluggy/items',{method:'POST',headers,body:JSON.stringify({id})})).status,401);
+  const login=await fetch(base+'session',{method:'POST',headers,body:JSON.stringify({token:s.data.uiToken})});headers.Cookie=login.headers.get('set-cookie').split(';')[0];
+  assert.equal((await fetch(base+'meu-pluggy/items',{method:'POST',headers,body:JSON.stringify({id:'bad'})})).status,400);
+  assert.equal((await fetch(base+'meu-pluggy/items',{method:'POST',headers,body:JSON.stringify({id,label:'PicPay'})})).status,200);
+  assert.equal((await fetch(base+'disconnect',{method:'POST',headers,body:JSON.stringify({id})})).status,200);
+  assert.equal(s.data.items.length,0);assert.equal(calls.length,1);assert.equal(calls[0][0],'/items/'+id);
+});

@@ -40,4 +40,14 @@ export class Pluggy {
     }
     throw new Error('O banco ainda está processando a atualização. Tente novamente mais tarde.');
   }
+  async readAvailable(id) {
+    // Meu Pluggy proxy items follow the original bank connection; PATCH is forbidden.
+    const item=await this.request('/items/'+encodeURIComponent(id));
+    if(item.consentExpiresAt && (!Number.isFinite(Date.parse(item.consentExpiresAt)) || Date.parse(item.consentExpiresAt)<=Date.now())) {
+      throw new Error('A autorização do Meu Pluggy expirou. Autorize novamente o conector MeuPluggy no Dashboard e confira o novo Item ID. Seus dados locais foram preservados.');
+    }
+    if(item.error?.code==='USER_AUTHORIZATION_EXPIRED' || item.status==='LOGIN_ERROR') throw new Error('Renove a autorização do conector MeuPluggy no Dashboard e confira o Item ID.');
+    if(item.status!=='UPDATED') throw new Error('Os dados ainda não estão disponíveis no Meu Pluggy. Aguarde a atualização lá e tente importar novamente.');
+    return item;
+  }
 }
