@@ -5,7 +5,7 @@ Aplicativo pessoal para macOS com painel local, integração Pluggy Open Finance
 ## Estado da entrega
 
 - Interface e servidor local implementados; atalho `Open Finance.app` criado no Desktop.
-- Oito testes automatizados passaram, incluindo chamada MCP com o cliente oficial.
+- Dez testes automatizados passaram, incluindo chamada MCP com o cliente oficial.
 - Sem dados fictícios. A conexão real depende de conta Pluggy com Open Finance habilitado e do consentimento em cada banco; ainda não foi testada com contas reais.
 - Repositório do projeto: https://github.com/DaniloReis10/finance_mcp.
 - A conexão externa com ChatGPT depende de configurar um Secure MCP Tunnel na conta OpenAI. O servidor MCP local funciona, mas não está conectado ao ChatGPT.
@@ -19,7 +19,7 @@ Aplicativo pessoal para macOS com painel local, integração Pluggy Open Finance
 4. Clique **Conectar banco**, escolha a instituição e conclua o consentimento no fluxo do provedor/banco. A lista é obtida da API e restrita a conectores Open Finance reais.
 5. Use **Sincronizar agora**, ou mantenha a atualização automática ativada.
 
-O serviço verifica a agenda a cada minuto. Uma sincronização completa bem-sucedida adia a próxima por 24 horas. Em falha total ou parcial, uma nova tentativa ocorre após uma hora. Ao acordar da suspensão, o Mac processa a atualização vencida. A conexão à internet e a sessão do usuário precisam estar disponíveis. MFA ou consentimento expirado podem exigir intervenção no banco.
+O serviço verifica a agenda a cada minuto, após o primeiro banco ser registrado. Uma sincronização completa bem-sucedida adia a próxima por 24 horas. Em falha total ou parcial, uma nova tentativa ocorre após uma hora. Ao acordar da suspensão, o Mac processa a atualização vencida. A conexão à internet e a sessão do usuário precisam estar disponíveis. MFA ou consentimento expirado podem exigir intervenção no banco.
 
 Os produtos desta versão são contas, cartões e transações disponibilizados pelo provedor. Investimentos, empréstimos, extratos em PDF e conciliação contábil não estão implementados. O painel soma apenas contas bancárias em BRL; cartões e outras moedas permanecem separados nos dados de contas. Datas e sinais de transações seguem o provedor.
 
@@ -86,7 +86,7 @@ Após revogar o token local, reinicie a ponte/túnel para que leia o novo token.
 - Interface protegida por sessão HttpOnly/SameSite e validações de Host/Origin; MCP exige token distinto. Servidor restrito a loopback.
 - Apenas dados selecionados de contas/transações são persistidos. Senhas bancárias não são recebidas pelo backend; o consentimento ocorre no widget oficial do provedor.
 - Atualizações são serializadas. Todas as páginas de um banco precisam ter sido obtidas antes da substituição dos dados locais. Falhas preservam o último resultado e aparecem no histórico.
-- Conexões são reconciliadas por `clientUserId`, inclusive se a janela de consentimento fechar antes do callback. É necessário usar a aplicação Pluggy configurada aqui; conexões antigas de outros aplicativos não são importadas.
+- Conexões são registradas pelo callback do widget e validadas por `clientUserId`. A sincronização usa somente os IDs salvos e não depende do endpoint comercial de listagem da Pluggy. Se a janela fechar antes do callback, a conexão não será registrada automaticamente; conclua o fluxo pelo aplicativo. Conexões antigas de outros aplicativos não são importadas.
 - **Desconectar e apagar dados** remove o item no provedor e os dados locais desse banco. Confira os consentimentos também no app bancário.
 
 ## Verificação

@@ -15,6 +15,8 @@ export class Pluggy {
       ...(body!==undefined?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)
     });
     if (response.status===401 && retry) { this.key=null; return this.request(route,method,body,false); }
+    if (response.status===401) throw new Error('A Pluggy recusou a autorização da aplicação, mesmo após renovar o token. Confira o Client ID e o Client Secret e as permissões da aplicação na Pluggy.');
+    if (response.status===403) throw new Error('Seu aplicativo ou plano Pluggy não tem permissão para esta operação. Confira a habilitação do produto com a Pluggy.');
     if (!response.ok) throw new Error(response.status===429 ? 'Limite do provedor atingido. Tente novamente mais tarde.' : `O provedor retornou erro ${response.status}. Verifique a conexão no banco.`);
     return response.status===204?null:response.json();
   }

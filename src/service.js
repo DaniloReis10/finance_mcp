@@ -1,7 +1,7 @@
 import {Pluggy} from './pluggy.js';
 export const DAY=24*60*60*1000;
 export function due(data, now=Date.now()) {
-  return Boolean(data.dailyEnabled && data.credentials &&
+  return Boolean(data.dailyEnabled && data.credentials && data.items?.length &&
     (!data.lastSuccess || now-Date.parse(data.lastSuccess)>=DAY) &&
     (!data.lastAttempt || now-Date.parse(data.lastAttempt)>=3600000));
 }
@@ -12,7 +12,7 @@ export class Finance {
     const d=this.store.data;
     return {configured:!!d.credentials,dailyEnabled:d.dailyEnabled,busy:this.busy,
       lastSuccess:d.lastSuccess,lastAttempt:d.lastAttempt,items:d.items,
-      nextSync:d.dailyEnabled && d.credentials ? new Date(Math.max(Date.now(),d.lastSuccess?Date.parse(d.lastSuccess)+DAY:0,d.lastAttempt?Date.parse(d.lastAttempt)+3600000:0)).toISOString():null,
+      nextSync:d.dailyEnabled && d.credentials && d.items.length ? new Date(Math.max(Date.now(),d.lastSuccess?Date.parse(d.lastSuccess)+DAY:0,d.lastAttempt?Date.parse(d.lastAttempt)+3600000:0)).toISOString():null,
       history:d.history,accounts:d.accounts,transactionCount:d.transactions.length};
   }
   transactions({accountId,from,to,limit=100,offset=0}={}) {
@@ -39,9 +39,6 @@ export class Finance {
     let successes=0,errors=[];
     try {
       const client=this.client();
-      // Reconcile connections even when the consent window was closed before its callback.
-      const remote=await client.pages('/items?clientUserId='+encodeURIComponent(d.userId));
-      for(const item of remote) if(item.clientUserId===d.userId && item.connector?.isOpenFinance) this.upsertItem(item);
       if(!d.items.length) throw new Error('Nenhum banco conectado. Use “Conectar banco” para autorizar o acesso.');
       for(const item of [...d.items]) {
         try {
