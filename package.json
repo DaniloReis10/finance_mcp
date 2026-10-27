@@ -13,10 +13,11 @@
   "description": "Open Finance pessoal com desktop macOS, sincronização diária e MCP",
   "scripts": {
     "start": "node src/server.js",
-    "build": "esbuild src/browser.js --bundle --format=esm --outfile=public/bundle.js --minify",
+    "build": "esbuild src/browser.js --bundle --format=esm --outfile=public/bundle.js --minify && npm run build:server",
     "test": "node --test",
     "desktop": "node scripts/launch.js",
-    "install:mac": "node scripts/install-mac.js"
+    "install:mac": "node scripts/install-mac.js",
+    "build:server": "esbuild src/server.js --bundle --platform=node --format=esm --banner:js=\"import {createRequire} from 'node:module';const require=createRequire(import.meta.url);\" --outfile=src/server.bundle.mjs"
   },
   "engines": {
     "node": ">=22"

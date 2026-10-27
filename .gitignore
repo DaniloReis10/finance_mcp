@@ -8,3 +8,4 @@ node_modules/
 coverage/
 .runtime/
 public/bundle.js
+src/server.bundle.mjs
